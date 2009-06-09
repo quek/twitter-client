@@ -3,8 +3,8 @@
   (require :mcclim)
   (require :mcclim-freetype)
   (require :mcclim-uim)
-  (require :drakma)
-  (require :cl-ppcre))
+  (require :cl-twitter)
+  (require :net-telent-date))
 
 (defpackage :mcclim-twitter-html-client
     (:use :clim :clim-lisp :quek))
@@ -13,66 +13,35 @@
 
 ;; 文字コードは UTF-8 で
 (setf drakma:*drakma-default-external-format* :utf-8)
-(pushnew '("application" . "json") drakma:*text-content-types* :test #'equal)
 
-
-(defparameter *basic-authorization*
-  (with-open-file (in (merge-pathnames #p".twitter.lisp"
+(defvar *auth*
+  (with-open-file (in (merge-pathnames ".twitter.lisp"
                                        (user-homedir-pathname)))
     (read in))
   "Basic 認証のパラメータを取得する。~/.twitter.lisp の中身は
 (\"username\" \"password\")")
 
-(defparameter *r* (ppcre:create-scanner
-                   (string+
-                    "<tr id=\"status_([^\"]+)\".*?"
-                    ">([^<]*)</a></strong>.*?"
-                    "<span class=\"entry-content\">(.*?)</span>")
-                   :single-line-mode t))
+(defun dispay-create-at (tweet)
+  (multiple-value-bind (second minute hour date month)
+      (decode-universal-time
+       (net.telent.date:parse-time (twitter:tweet-created-at tweet)))
+    (format nil "~02,'0d/~02,'0d ~02,'0d:~02,'0d:~02,'0d"
+            month date hour minute second)))
 
-(defvar *status* (make-hash-table :test #'equal))
-;;(clrhash *status*)
-
-(defclass status ()
-  ((status-id :initarg :status-id)
-   (user-id :initarg :user-id)
-   (content :initarg :content)))
-
-(defun update-timeline ()
-  (labels ((trim (s)
-             (string-trim
-              '(#\space #\cr  #\lf)
-              (reduce (lambda (a b)
-                        (ppcre:regex-replace-all (car b) a (cadr b)))
-                      '(("&lt;" "<")
-                        ("&gt;" ">")
-                        ("&quot;" "\"")
-                        ("&amp;" "&"))
-                      :initial-value s)))
-           (request ()
-             (drakma:http-request "http://twitter.com/home"
-                                  :basic-authorization *basic-authorization*)))
-    (let ((res (request)))
-      (print res)
-      (ppcre:do-register-groups ((#'trim status-id)
-                                 (#'trim user-id)
-                                 (#'trim content))
-          (*r* res)
-        (sunless (gethash status-id *status*)
-          (setf it (make-instance 'status
-                                  :status-id status-id
-                                  :user-id user-id
-                                  :content content)))))
-    *status*))
+(defun update-timeline (frame)
+  (with-output-to-string (*standard-output*)
+    (with-slots (timeline last-id) frame
+      (let ((update (twitter:friends-timeline :since-id last-id)))
+        (when update
+          (setf last-id (twitter:tweet-id (car update)))
+          (setf timeline (append update timeline)))))))
 
 (defun update-status (new-status)
-  (drakma:http-request "http://twitter.com/statuses/update.json"
-                       :basic-authorization *basic-authorization*
-                       :method :post
-                       :parameters `(("status" . ,new-status))))
+  (twitter:send-tweet new-status))
 
 (define-application-frame twitter-frame ()
-  ()
+  ((timeline :initform nil :accessor timeline)
+   (last-id :initform 1 :accessor last-id))
   (:menu-bar t)
   (:panes (timeline-pane
            :application
@@ -93,46 +62,45 @@
                        timeline-pane
                        (horizontally (:height 50) text-editor entry-button)))))
 
-(define-presentation-type status ())
+(define-presentation-type twitter:tweet ())
 
-(define-presentation-method present (object (type status) stream view &key)
-  (with-slots (status-id user-id content) object
-    (format stream "~15a ~a" user-id content)))
+(define-presentation-method present (object (type twitter:tweet)
+                                            stream view &key)
+  (format stream "~15a ~a ~a"
+          (twitter:twitter-user-screen-name
+                                    (twitter:tweet-user object))
+          (twitter:tweet-text object)
+          (dispay-create-at object)))
 
 (defun display-timeline (frame pane)
-  (declare (ignore frame))
-  (mapc (lambda (status)
-          (updating-output (pane :unique-id status)
-            (present status 'status :stream pane)
-            (terpri pane)))
-        (sort (loop for k being the hash-keys in *status*
-                    using (hash-value v)
-                    collect v)
-              (lambda (x y)
-                (string<= (slot-value x 'status-id)
-                          (slot-value y 'status-id))))))
+  (with-slots (timeline last-id) frame
+    (mapc (lambda (tweet)
+            (updating-output (pane :unique-id tweet)
+              (present tweet 'twitter:tweet :stream pane)
+              (terpri pane)))
+          timeline)))
 
 (define-twitter-frame-command (com-quit :menu t :name t) ()
   (frame-exit *application-frame*))
 
 (define-twitter-frame-command (com-update-timeline :menu t :name t) ()
-  (update-timeline))
+  (update-timeline *application-frame*))
 
 (define-twitter-frame-command (com-update-status) ()
   (let* ((text-editor (find-pane-named *application-frame* 'text-editor))
          (new-status (gadget-value text-editor)))
     (update-status new-status)
     (setf (gadget-value text-editor) "")
-    (update-timeline)
+    (update-timeline *application-frame*)
     (redisplay-frame-panes *application-frame*)))
 
 (defmethod adopt-frame :after (manager (frame twitter-frame))
   (declare (ignore manager))
+  (apply #'twitter:authenticate-user *auth*)
   (execute-frame-command
    frame
    `(com-update-timeline)))
 
-;;(clrhash *status*)
 #+nil
 (quek:spawn
   (run-frame-top-level (make-application-frame 'twitter-frame
