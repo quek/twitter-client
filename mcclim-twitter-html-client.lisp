@@ -7,7 +7,7 @@
   (require :net-telent-date))
 
 (defpackage :mcclim-twitter-html-client
-    (:use :clim :clim-lisp :quek))
+    (:use :clim :clim-lisp))
 
 (in-package :mcclim-twitter-html-client)
 
@@ -39,9 +39,29 @@
 (defun update-status (new-status)
   (twitter:send-tweet new-status))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (define-presentation-type twitter:tweet ()))
+
+(define-presentation-method present (object (type twitter:tweet)
+                                            stream view &key)
+  (format stream "~15a ~a ~a"
+          (twitter:twitter-user-screen-name
+                                    (twitter:tweet-user object))
+          (twitter:tweet-text object)
+          (dispay-create-at object)))
+
+(defun display-timeline (frame pane)
+  (with-slots (timeline last-id) frame
+    (mapc (lambda (tweet)
+            (updating-output (pane :unique-id tweet)
+              (present tweet 'twitter:tweet :stream pane)
+              (terpri pane)))
+          timeline)))
+
 (define-application-frame twitter-frame ()
   ((timeline :initform nil :accessor timeline)
-   (last-id :initform 1 :accessor last-id))
+   (last-id :initform 1 :accessor last-id)
+   (worker))
   (:menu-bar t)
   (:panes (timeline-pane
            :application
@@ -62,24 +82,6 @@
                        timeline-pane
                        (horizontally (:height 50) text-editor entry-button)))))
 
-(define-presentation-type twitter:tweet ())
-
-(define-presentation-method present (object (type twitter:tweet)
-                                            stream view &key)
-  (format stream "~15a ~a ~a"
-          (twitter:twitter-user-screen-name
-                                    (twitter:tweet-user object))
-          (twitter:tweet-text object)
-          (dispay-create-at object)))
-
-(defun display-timeline (frame pane)
-  (with-slots (timeline last-id) frame
-    (mapc (lambda (tweet)
-            (updating-output (pane :unique-id tweet)
-              (present tweet 'twitter:tweet :stream pane)
-              (terpri pane)))
-          timeline)))
-
 (define-twitter-frame-command (com-quit :menu t :name t) ()
   (frame-exit *application-frame*))
 
@@ -97,11 +99,17 @@
 (defmethod adopt-frame :after (manager (frame twitter-frame))
   (declare (ignore manager))
   (apply #'twitter:authenticate-user *auth*)
-  (execute-frame-command
-   frame
-   `(com-update-timeline)))
+  (execute-frame-command frame `(com-update-timeline))
+  (setf (slot-value frame 'worker)
+        (quek:spawn (loop (quek:receive (:timeout 70)
+                            (:quit (return)))
+                          (update-timeline frame)
+                          (redisplay-frame-panes frame)))))
+
+
+(defmethod frame-exit :before ((frame twitter-frame))
+  (quek:send (slot-value frame 'worker) :quit))
 
 #+nil
-(quek:spawn
-  (run-frame-top-level (make-application-frame 'twitter-frame
-                                               :top 300 :left 600)))
+(run-frame-top-level (make-application-frame 'twitter-frame
+                                             :top 300 :left 600))
