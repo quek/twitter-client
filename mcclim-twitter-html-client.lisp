@@ -53,6 +53,7 @@
              (drakma:http-request "http://twitter.com/home"
                                   :basic-authorization *basic-authorization*)))
     (let ((res (request)))
+      (print res)
       (ppcre:do-register-groups ((#'trim status-id)
                                  (#'trim user-id)
                                  (#'trim content))
@@ -91,10 +92,6 @@
   (:layouts (default (vertically (:width 900 :height 600)
                        timeline-pane
                        (horizontally (:height 50) text-editor entry-button)))))
-
-(defun text-field-value-changed (pane value)
-  (declare (ignore pane))
-  (setf (entered-status *application-frame*) value))
 
 (define-presentation-type status ())
 
@@ -137,5 +134,6 @@
 
 ;;(clrhash *status*)
 #+nil
-(run-frame-top-level (make-application-frame 'twitter-frame
-                                             :top 300 :left 600))
+(quek:spawn
+  (run-frame-top-level (make-application-frame 'twitter-frame
+                                               :top 300 :left 600)))
