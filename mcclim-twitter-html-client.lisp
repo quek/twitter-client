@@ -1,3 +1,4 @@
+#|
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (require :quek)
   (require :mcclim)
@@ -5,6 +6,7 @@
   (require :mcclim-uim)
   (require :cl-twitter)
   (require :net-telent-date))
+|#
 
 (defpackage :mcclim-twitter-html-client
     (:use :clim :clim-lisp))
@@ -50,13 +52,32 @@
           (twitter:tweet-text object)
           (dispay-create-at object)))
 
+(defun table-format (stream timeline)
+  (fresh-line stream)
+  (formatting-table (stream :x-spacing '(1 :character))
+    (loop for tweet in timeline
+          do (formatting-row (stream)
+               (formatting-cell (stream)
+                 (princ (twitter:twitter-user-screen-name
+                         (twitter:tweet-user tweet))
+                        stream))
+               (formatting-cell (stream)
+                 (princ (twitter:tweet-text tweet) stream))
+               (formatting-cell (stream)
+                 (princ (dispay-create-at tweet) stream))))))
+
+
 (defun display-timeline (frame pane)
-  (with-slots (timeline last-id) frame
-    (mapc (lambda (tweet)
-            (updating-output (pane :unique-id tweet)
-              (present tweet 'twitter:tweet :stream pane)
-              (terpri pane)))
-          timeline)))
+  (with-slots (timeline) frame
+    (table-format pane timeline)))
+
+;; (defun display-timeline (frame pane)
+;;   (with-slots (timeline) frame
+;;     (mapc (lambda (tweet)
+;;             (updating-output (pane :unique-id tweet)
+;;               (present tweet 'twitter:tweet :stream pane)
+;;               (terpri pane)))
+;;           timeline)))
 
 (define-application-frame twitter-frame ()
   ((timeline :initform nil :accessor timeline)
