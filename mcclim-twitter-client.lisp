@@ -147,7 +147,8 @@
                        timeline-pane
                        (horizontally (:height 50) text-field entry-button)))))
 
-(define-twitter-frame-command (com-quit :menu t :name t) ()
+(define-twitter-frame-command (com-quit :menu t :name t
+                                        :keystroke (#\q :meta)) ()
   (frame-exit *application-frame*))
 
 (define-twitter-frame-command (com-update-timeline :menu t :name t) ()
@@ -192,14 +193,17 @@
                ;; "/home/ancient/archive/1.jpeg"
                ;;:format :jpeg)
                (make-pattern-from-bitmap-file
-                "/home/ancient/archive/Dino_orange_64x64_normal.png"
-                ;;"/home/ancient/letter/lisp/clbuild/source/cl-png/test/images/butterfly8.png"
+                "/home/ancient/letter/lisp/clbuild/source/cl-png/test/images/butterfly8.png"
                 :format :png)
                 ))
           (draw-pattern* stream
                          pattern
                          0 0)))))
     (:geometry :width 300 :height 300 :top 300 :left 500))
+
+  (define-foo-frame-command (com-quit :menu t :name t
+                                      :keystroke (#\q :meta)) ()
+    (frame-exit *application-frame*))
 
   (run-frame-top-level (make-application-frame 'foo-frame)))
 
