@@ -8,6 +8,11 @@
   (require :mcclim-uim)
   (require :cl-twitter)
   (require :net-telent-date))
+
+TODO
+model
+cell の幅。
+presentation
 |#
 
 (defpackage :mcclim-twitter-html-client
@@ -59,14 +64,16 @@
         (setf (gethash url *user-profile-images*)
               (make-pattern-from-url url)))))
 
-
 (defun update-timeline (frame)
   (with-output-to-string (*standard-output*)
     (with-slots (timeline last-id) frame
       (let ((update (twitter:friends-timeline :since-id last-id)))
         (when update
           (setf last-id (twitter:tweet-id (car update)))
-          (setf timeline (append update timeline)))))))
+          (setf timeline (append update timeline))
+          (mapc (lambda (tweet)
+                  (ignore-errors (get-user-profile-image tweet)))
+                update))))))
 
 (defun update-status (new-status)
   (twitter:send-tweet new-status))
@@ -88,14 +95,12 @@
     (loop for tweet in timeline
           do (formatting-row (stream)
                (formatting-cell (stream)
-                 (or (ignore-errors
-                       (draw-pattern* stream
-                                      (get-user-profile-image tweet)
-                                      0 0
-                                      :transformation
-                                      (make-scaling-transformation* 2 3))
-                       t)
-                     (princ "*" stream)))
+                 (let ((image (gethash (twitter:twitter-user-profile-image-url
+                                        (twitter:tweet-user tweet))
+                                       *user-profile-images*)))
+                   (if image
+                       (draw-pattern* stream image 0 0)
+                       (princ "*" stream))))
                (formatting-cell (stream)
                  (princ (twitter:twitter-user-screen-name
                          (twitter:tweet-user tweet))
@@ -165,12 +170,13 @@
 (defmethod adopt-frame :after (manager (frame twitter-frame))
   (declare (ignore manager))
   (apply #'twitter:authenticate-user *auth*)
-  (execute-frame-command frame `(com-update-timeline))
   (setf (slot-value frame 'worker)
-        (quek:spawn (loop (quek:receive (:timeout 70)
-                            (:quit (return)))
-                          (update-timeline frame)
-                          (redisplay-frame-panes frame)))))
+        (quek:spawn
+          (execute-frame-command frame `(com-update-timeline))
+          (loop (quek:receive (:timeout 70)
+                  (:quit (return)))
+                (update-timeline frame)
+                (redisplay-frame-panes frame)))))
 
 
 (defmethod frame-exit :before ((frame twitter-frame))
