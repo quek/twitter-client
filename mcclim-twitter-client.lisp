@@ -4,6 +4,7 @@
   (require :mcclim)
   (require :mcclim-freetype)
   (require :mcclim-jpeg-bitmaps)
+  (require :mcclim-png-bitmaps)
   (require :mcclim-uim)
   (require :cl-twitter)
   (require :net-telent-date))
@@ -92,7 +93,8 @@
                                       (get-user-profile-image tweet)
                                       0 0
                                       :transformation
-                                      (make-scaling-transformation* 2 3)))
+                                      (make-scaling-transformation* 2 3))
+                       t)
                      (princ "*" stream)))
                (formatting-cell (stream)
                  (princ (twitter:twitter-user-screen-name
@@ -179,23 +181,30 @@
 (progn
   (define-application-frame foo-frame ()
     ()
-    (:pane (make-pane
-            'application-pane
-            :display-function
-            (lambda (frame stream)
-              (declare (ignore frame))
-              (let ((pattern (make-pattern-from-bitmap-file
-                              "/home/ancient/archive/1.jpeg"
-                              :format :jpeg)))
-                (draw-pattern* stream
-                               pattern
-                               0 0)))))
+    (:pane
+     (make-pane
+      'application-pane
+      :display-function
+      (lambda (frame stream)
+        (declare (ignore frame))
+        (let ((pattern
+               ;;(make-pattern-from-bitmap-file
+               ;; "/home/ancient/archive/1.jpeg"
+               ;;:format :jpeg)
+               (make-pattern-from-bitmap-file
+                "/home/ancient/archive/Dino_orange_64x64_normal.png"
+                ;;"/home/ancient/letter/lisp/clbuild/source/cl-png/test/images/butterfly8.png"
+                :format :png)
+                ))
+          (draw-pattern* stream
+                         pattern
+                         0 0)))))
     (:geometry :width 300 :height 300 :top 300 :left 500))
 
   (run-frame-top-level (make-application-frame 'foo-frame)))
 
-(make-pattern-from-url "http://s3.amazonaws.com/twitter_production/profile_images/38371932/yahn5_normal.jpg")
 
+(make-pattern-from-bitmap-file "/home/ancient/archive/1.jpeg" :format :jpeg)
 |#
 
 #+nil
