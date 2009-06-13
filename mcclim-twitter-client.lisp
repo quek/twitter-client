@@ -10,7 +10,7 @@
   (require :net-telent-date))
 
 TODO
-model
+model 排他 thread
 cell の幅。
 presentation
 |#
@@ -78,17 +78,6 @@ presentation
 (defun update-status (new-status)
   (twitter:send-tweet new-status))
 
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (define-presentation-type twitter:tweet ()))
-
-(define-presentation-method present (object (type twitter:tweet)
-                                            stream view &key)
-  (format stream "~15a ~a ~a"
-          (twitter:twitter-user-screen-name
-                                    (twitter:tweet-user object))
-          (twitter:tweet-text object)
-          (dispay-create-at object)))
-
 (defun table-format (stream timeline)
   (fresh-line stream)
   (formatting-table (stream :x-spacing '(1 :character))
@@ -111,17 +100,38 @@ presentation
                  (princ (dispay-create-at tweet) stream))))))
 
 
+;;(defun display-timeline (frame pane)
+;;  (with-slots (timeline) frame
+;;    (table-format pane timeline)))
+
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (define-presentation-type twitter:tweet ()))
+
+(define-presentation-method present (tweet (type twitter:tweet)
+                                           stream view &key)
+  (let ((image (gethash (twitter:twitter-user-profile-image-url
+                         (twitter:tweet-user tweet))
+                        *user-profile-images*)))
+    (multiple-value-bind (x y) (stream-cursor-position stream)
+      (when image
+        (draw-pattern* stream image x y))
+      (stream-increment-cursor-position stream 52 0)
+      (format stream "~15a ~a~%"
+              (twitter:twitter-user-screen-name
+               (twitter:tweet-user tweet))
+              (dispay-create-at tweet))
+      (stream-increment-cursor-position stream 52 0)
+      (princ (twitter:tweet-text tweet) stream)
+      (stream-set-cursor-position stream 0 (+ y 30)))))
+
 (defun display-timeline (frame pane)
   (with-slots (timeline) frame
-    (table-format pane timeline)))
-
-;; (defun display-timeline (frame pane)
-;;   (with-slots (timeline) frame
-;;     (mapc (lambda (tweet)
-;;             (updating-output (pane :unique-id tweet)
-;;               (present tweet 'twitter:tweet :stream pane)
-;;               (terpri pane)))
-;;           timeline)))
+    (mapc (lambda (tweet)
+            (updating-output (pane :unique-id tweet)
+              (present tweet 'twitter:tweet :stream pane)
+              (terpri pane)))
+          (reverse timeline))))
 
 (define-application-frame twitter-frame ()
   ((timeline :initform nil :accessor timeline)
@@ -130,7 +140,7 @@ presentation
   (:menu-bar t)
   (:panes (timeline-pane
            :application
-           :incremental-redisplay nil
+           :incremental-redisplay t
            :display-function 'display-timeline)
           (text-field
            :text-field
@@ -170,10 +180,10 @@ presentation
 (defmethod adopt-frame :after (manager (frame twitter-frame))
   (declare (ignore manager))
   (apply #'twitter:authenticate-user *auth*)
+  (execute-frame-command frame `(com-update-timeline))
   (setf (slot-value frame 'worker)
         (quek:spawn
-          (execute-frame-command frame `(com-update-timeline))
-          (loop (quek:receive (:timeout 70)
+          (loop (quek:receive (:timeout 80)
                   (:quit (return)))
                 (update-timeline frame)
                 (redisplay-frame-panes frame)))))
