@@ -10,15 +10,13 @@
   (require :net-telent-date))
 
 TODO
-model 排他 thread
-cell の幅。
-presentation
+更新時のスクロール
 |#
 
-(defpackage :mcclim-twitter-html-client
+(defpackage :mcclim-twitter-client
     (:use :clim :clim-lisp))
 
-(in-package :mcclim-twitter-html-client)
+(in-package :mcclim-twitter-client)
 
 ;; 文字コードは UTF-8 で
 (setf drakma:*drakma-default-external-format* :utf-8)
@@ -29,6 +27,45 @@ presentation
     (read in))
   "Basic 認証のパラメータを取得する。~/.twitter.lisp の中身は
 (\"username\" \"password\")")
+
+(defclass tworker ()
+  ((public-timeline :initform nil :accessor public-timeline)
+   (friend-timeline :initform nil :accessor friend-timeline)
+   (last-id :initform nil :accessor last-id)
+   (friend-timeline-update-callback
+    :initarg :friend-timeline-update-callback)))
+
+(defgeneric update-friend-timeline (tworker))
+(defmethod update-friend-timeline ((tworker tworker))
+  (with-slots (friend-timeline last-id friend-timeline-update-callback)
+      tworker
+    (let ((update (apply #'twitter:friends-timeline
+                         (and last-id (list :since-id last-id)))))
+      (when update
+        (setf last-id (twitter:tweet-id (car update)))
+        (setf friend-timeline (append update friend-timeline))
+        (mapc (lambda (tweet)
+                (ignore-errors (get-user-profile-image tweet)))
+              update)
+        (funcall friend-timeline-update-callback friend-timeline)))))
+
+(defgeneric tworker-loop (tworker))
+(defmethod tworker-loop ((tworker tworker))
+  (apply #'twitter:authenticate-user *auth*)
+  (update-friend-timeline tworker)
+  (loop
+    (quek:receive (80 (update-friend-timeline tworker))
+      ((:send text)
+       (twitter:send-tweet text)
+       (update-friend-timeline tworker))
+      (:update-friend-timeline
+       (update-friend-timeline tworker))
+      (:quit
+       (return)))))
+
+(defgeneric tworker-start (tworker))
+(defmethod tworker-start ((tworker tworker))
+  (quek:spawn (tworker-loop tworker)))
 
 (defun dispay-create-at (tweet)
   (multiple-value-bind (second minute hour date month)
@@ -53,7 +90,6 @@ presentation
          (make-pattern-from-bitmap-file
           path :format (intern (string-upcase type) :keyword))
       (delete-file path))))
-;;(make-pattern-from-url"http://s3.amazonaws.com/twitter_production/profile_images/38371932/yahn5_normal.jpg")
 
 (defun get-user-profile-image (tweet)
   (let* ((url (twitter:twitter-user-profile-image-url
@@ -63,20 +99,6 @@ presentation
         image
         (setf (gethash url *user-profile-images*)
               (make-pattern-from-url url)))))
-
-(defun update-timeline (frame)
-  (with-output-to-string (*standard-output*)
-    (with-slots (timeline last-id) frame
-      (let ((update (twitter:friends-timeline :since-id last-id)))
-        (when update
-          (setf last-id (twitter:tweet-id (car update)))
-          (setf timeline (append update timeline))
-          (mapc (lambda (tweet)
-                  (ignore-errors (get-user-profile-image tweet)))
-                update))))))
-
-(defun update-status (new-status)
-  (twitter:send-tweet new-status))
 
 (defun table-format (stream timeline)
   (fresh-line stream)
@@ -135,8 +157,7 @@ presentation
 
 (define-application-frame twitter-frame ()
   ((timeline :initform nil :accessor timeline)
-   (last-id :initform 1 :accessor last-id)
-   (worker))
+   (tworker))
   (:menu-bar t)
   (:panes (timeline-pane
            :application
@@ -167,30 +188,29 @@ presentation
   (frame-exit *application-frame*))
 
 (define-twitter-frame-command (com-update-timeline :menu t :name t) ()
-  (update-timeline *application-frame*))
+  (quek:send (slot-value *application-frame* 'tworker)
+             :update-friend-timeline))
 
 (define-twitter-frame-command (com-update-status) ()
   (let* ((text-field (find-pane-named *application-frame* 'text-field))
          (new-status (gadget-value text-field)))
-    (update-status new-status)
-    (setf (gadget-value text-field) "")
-    (update-timeline *application-frame*)
-    (redisplay-frame-panes *application-frame*)))
+    (quek:send (slot-value *application-frame* 'tworker)
+               (list :send new-status))
+    (setf (gadget-value text-field) "")))
 
 (defmethod adopt-frame :after (manager (frame twitter-frame))
   (declare (ignore manager))
-  (apply #'twitter:authenticate-user *auth*)
-  (execute-frame-command frame `(com-update-timeline))
-  (setf (slot-value frame 'worker)
-        (quek:spawn
-          (loop (quek:receive (:timeout 80)
-                  (:quit (return)))
-                (update-timeline frame)
-                (redisplay-frame-panes frame)))))
-
+  (let ((tworker (make-instance
+                  'tworker
+                  :friend-timeline-update-callback
+                  (lambda (friend-timeline)
+                    (setf (timeline frame) friend-timeline)
+                    (redisplay-frame-panes frame)))))
+  (setf (slot-value frame 'tworker)
+        (tworker-start tworker))))
 
 (defmethod frame-exit :before ((frame twitter-frame))
-  (quek:send (slot-value frame 'worker) :quit))
+  (quek:send (slot-value frame 'tworker) :quit))
 
 
 
