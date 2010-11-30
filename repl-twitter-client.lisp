@@ -2,17 +2,18 @@
   (require :series)
   (require :cl-oauth)
   (require :drakma)
-  (require :cl-json))
+  (require :cl-json)
+  (require :quek))
 
 ;; 対 drakma 用おまじない
 (setf drakma:*drakma-default-external-format* :utf-8)
 (pushnew '("application" . "json") drakma:*text-content-types* :test #'equal)
 
 (defpackage :repl-twitter-client
-  (:use :cl :series)
+  (:use :cl :series :quek)
   (:shadowing-import-from :series let let* multiple-value-bind funcall defun)
-  (:export #:home-timeline
-           #:tweet))
+  (:export #:tweet
+           #:timeline))
 
 (in-package :repl-twitter-client)
 
@@ -53,4 +54,25 @@
       "http://api.twitter.com/1/statuses/update.json"
       *access-token*
       :request-method :post
-      :user-parameters `(("status" . ,message))))))
+      :user-parameters `(("status" . ,#"""#,message #'求職中"""))))
+    message))
+
+(defun print-tweet (json-string)
+  (ignore-errors
+    (json:with-decoder-simple-clos-semantics
+      (let ((json:*json-symbols-package* :repl-twitter-client))
+        (let ((x (json:decode-json-from-string json-string)))
+          (with-slots (text user) x
+            (with-slots (name screen--name) user
+              (format *query-io* "~&  ~%~a (~a)~&~a~%" screen--name name text))))))))
+
+(defun timeline ()
+  (bt:make-thread
+   (^ with-open-stream (in (oauth:access-protected-resource
+                            "https://userstream.twitter.com/2/user.json"
+                            *access-token*
+                            :drakma-args '(:want-stream t)))
+      (loop for line = (read-line in nil)
+            while line
+            do (print-tweet line)))
+   :name "timeline"))
