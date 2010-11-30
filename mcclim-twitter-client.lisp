@@ -11,6 +11,7 @@
 
 TODO
 更新時のスクロール
+改行したとき画像とかぶる
 |#
 
 (defpackage :mcclim-twitter-client
