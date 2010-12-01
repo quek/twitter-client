@@ -13,6 +13,7 @@
   (:use :cl :series :quek)
   (:shadowing-import-from :series let let* multiple-value-bind funcall defun)
   (:export #:tweet
+           #:reply
            #:timeline))
 
 (in-package :repl-twitter-client)
@@ -47,27 +48,38 @@
     "http://api.twitter.com/1/statuses/home_timeline.json"
     *access-token*)))
 
-(defun tweet (&optional (message (query-message)))
+(defun update (message &key reply-to)
   (when message
     (json:decode-json-from-string
      (oauth:access-protected-resource
       "http://api.twitter.com/1/statuses/update.json"
       *access-token*
       :request-method :post
-      :user-parameters `(("status" . ,#"""#,message #'求職中"""))))
+      :user-parameters `(("status" . ,#"""#,message #'求職中""")
+                         ,@(when reply-to `(("in_reply_to_status_id" . ,(princ-to-string reply-to)))))))))
+
+(defun tweet ()
+  (let ((message (query-message)))
+    (update message)
     message))
+
+(defun reply (in-reply-to-status-id)
+  (let ((message (query-message)))
+    (update message :reply-to in-reply-to-status-id)
+    message))
+
 
 (defun print-tweet (json-string)
   (ignore-errors
     (json:with-decoder-simple-clos-semantics
       (let ((json:*json-symbols-package* :repl-twitter-client))
         (let ((x (json:decode-json-from-string json-string)))
-          (with-slots (text user) x
+          (with-slots (text user id) x
             (with-slots (name screen--name) user
-              (format *query-io* "~&  ~%~a (~a)~&~a~%" screen--name name text))))))))
+              (format *query-io* #"""~&  ~%#,screen--name (#,name,) #,id,~&#,text,~%"""))))))))
 
 (defun timeline ()
-  (bt:make-thread
+  (bordeaux-threads:make-thread
    (^ with-open-stream (in (oauth:access-protected-resource
                             "https://userstream.twitter.com/2/user.json"
                             *access-token*
@@ -75,4 +87,4 @@
       (loop for line = (read-line in nil)
             while line
             do (print-tweet line)))
-   :name "timeline"))
+   :name "https://userstream.twitter.com/2/user.json"))
