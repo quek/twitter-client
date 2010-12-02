@@ -68,15 +68,20 @@
     (update message :reply-to in-reply-to-status-id)
     message))
 
+(defun created-at-time (x)
+  (multiple-value-bind (s m h) (decode-universal-time  (net.telent.date:parse-time x))
+    (format nil "~2,'0d:~2,'0d:~2,'0d" h m s)))
 
 (defun print-tweet (json-string)
   (ignore-errors
     (json:with-decoder-simple-clos-semantics
       (let ((json:*json-symbols-package* :repl-twitter-client))
         (let ((x (json:decode-json-from-string json-string)))
-          (with-slots (text user id) x
+          (with-slots (text user id created--at) x
             (with-slots (name screen--name) user
-              (format *query-io* #"""~&  ~%#,screen--name (#,name,) #,id,~&#,text,~%"""))))))))
+              (format
+               *query-io*
+               #"""~&  ~%#,screen--name (#,name,) #,(created-at-time created--at) #,id,~&#,text,~%"""))))))))
 
 (defun timeline ()
   (bordeaux-threads:make-thread
@@ -88,3 +93,11 @@
             while line
             do (print-tweet line)))
    :name "https://userstream.twitter.com/2/user.json"))
+
+
+#|
+Emacs での画像表示法方
+(insert-image (create-image (expand-file-name "archive/1.jpg") 'jpeg nil))
+(add-text-properties (match-beginning 0) (match-end 0)
+				       (list 'display (create-image file)))
+|#
