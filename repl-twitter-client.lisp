@@ -3,7 +3,8 @@
   (require :cl-oauth)
   (require :drakma)
   (require :cl-json)
-  (require :quek))
+  (require :quek)
+  (require :net-telent-date))
 
 ;; 対 drakma 用おまじない
 (setf drakma:*drakma-default-external-format* :utf-8)
