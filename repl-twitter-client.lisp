@@ -107,10 +107,13 @@
   (unless (probe-file local-path)
     (ensure-directories-exist local-path)
     (with-open-file (out local-path :direction :output :element-type '(unsigned-byte 8))
-      (loop for i across (drakma:http-request image-url)
+      (loop for i across (drakma:http-request image-url
+                                :external-format-out :utf-8
+                                :external-format-in :utf-8)
             do (write-byte i out)))))
 
 (defun refresh-repl ()
+  (sleep 0.1)
   (swank::with-connection ((swank::default-connection))
           (swank::eval-in-emacs '(save-current-buffer
                                   (set-buffer (get-buffer-create "*slime-repl sbcl*"))
@@ -128,11 +131,3 @@
   (let ((local-path (local-profile-image-path user-id profile-image-url)))
     (send *profile-image-process* (list profile-image-url local-path))
     local-path))
-
-
-#|
-Emacs での画像表示法方
-(insert-image (create-image (expand-file-name "archive/1.jpg") 'jpeg nil))
-(add-text-properties (match-beginning 0) (match-end 0)
-				       (list 'display (create-image file)))
-|#
