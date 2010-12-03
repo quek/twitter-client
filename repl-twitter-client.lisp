@@ -44,12 +44,6 @@
                                            :secret ,(getf sec :access-secret))))))
   (m))
 
-(defun home-timeline ()
-  (json:decode-json-from-string
-   (oauth:access-protected-resource
-    "http://api.twitter.com/1/statuses/home_timeline.json"
-    *access-token*)))
-
 (defun update (message &key reply-to)
   (when message
     (json:decode-json-from-string
