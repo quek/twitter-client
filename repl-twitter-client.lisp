@@ -6,6 +6,8 @@
   (require :quek)
   (require :net-telent-date))
 
+(defparameter *profile-image-directory* (ensure-directories-exist "/tmp/repl-twitter-client-images/"))
+
 ;; 対 drakma 用おまじない
 (setf drakma:*drakma-default-external-format* :utf-8)
 (pushnew '("application" . "json") drakma:*text-content-types* :test #'equal)
@@ -79,10 +81,11 @@
       (let ((json:*json-symbols-package* :repl-twitter-client))
         (let ((x (json:decode-json-from-string json-string)))
           (with-slots (text user id created--at) x
-            (with-slots (name screen--name) user
-              (format
-               *query-io*
-               #"""~&  ~%#,screen--name (#,name,) #,(created-at-time created--at) #,id,~&#,text,~%"""))))))))
+            (with-slots (name screen--name profile--image--url id) user
+              (let ((path (get-profile-image id profile--image--url)))
+                (format
+                 *query-io*
+                  #"""~&#,path #,screen--name (#,name,) #,(created-at-time created--at) #,id,~&#,text,~%""")))))))))
 
 (defun timeline ()
   (bordeaux-threads:make-thread
@@ -94,6 +97,37 @@
             while line
             do (print-tweet line)))
    :name "https://userstream.twitter.com/2/user.json"))
+
+
+(defun local-profile-image-path (user-id profile-image-url)
+  (merge-pathnames (file-namestring (puri:uri-path (puri:uri profile-image-url)))
+                   #"""#,*profile-image-directory*,/#,user-id,/"""))
+
+(defun %get-profile-image (image-url local-path)
+  (unless (probe-file local-path)
+    (ensure-directories-exist local-path)
+    (with-open-file (out local-path :direction :output :element-type '(unsigned-byte 8))
+      (loop for i across (drakma:http-request image-url)
+            do (write-byte i out)))))
+
+(defun refresh-repl ()
+  (swank::with-connection ((swank::default-connection))
+          (swank::eval-in-emacs '(save-current-buffer
+                                  (set-buffer (get-buffer-create "*slime-repl sbcl*"))
+                                  (save-excursion
+                                    (iimage-mode 1))))))
+
+(defvar *profile-image-process*
+  (spawn (loop
+           (receive ()
+             ((profile-image-url local-path)
+              (%get-profile-image profile-image-url local-path)
+              (refresh-repl))))))
+
+(defun get-profile-image (user-id profile-image-url)
+  (let ((local-path (local-profile-image-path user-id profile-image-url)))
+    (send *profile-image-process* (list profile-image-url local-path))
+    local-path))
 
 
 #|
