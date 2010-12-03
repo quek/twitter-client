@@ -74,7 +74,7 @@
       (let ((json:*json-symbols-package* :repl-twitter-client))
         (let ((x (json:decode-json-from-string json-string)))
           (with-slots (text user id created--at) x
-            (with-slots (name screen--name profile--image--url id) user
+            (with-slots (name screen--name profile--image--url (user-id id)) user
               (let ((path (get-profile-image id profile--image--url)))
                 (format
                  *query-io*
