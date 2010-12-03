@@ -6,8 +6,6 @@
   (require :quek)
   (require :net-telent-date))
 
-(defparameter *profile-image-directory* (ensure-directories-exist "/tmp/repl-twitter-client-images/"))
-
 ;; 対 drakma 用おまじない
 (setf drakma:*drakma-default-external-format* :utf-8)
 (pushnew '("application" . "json") drakma:*text-content-types* :test #'equal)
@@ -24,6 +22,7 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (series::install :pkg :repl-twitter-client :implicit-map t))
 
+(defparameter *profile-image-directory* (ensure-directories-exist "/tmp/repl-twitter-client-images/"))
 
 (defun query-message ()
   (string-right-trim
