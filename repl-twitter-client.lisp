@@ -25,14 +25,11 @@
 (defparameter *profile-image-directory* (ensure-directories-exist "/tmp/repl-twitter-client-images/"))
 
 (defun query-message ()
-  (string-right-trim
-   #(#\Space #\Cr #\Lf #\Tab)
-   (with-output-to-string (out)
-     (loop for line = (read-line *terminal-io*)
-           until (string= "." line)
-           if (string= "\\q" line)
-             do (return-from query-message nil)
-           do (write-line line out)))))
+  (collect-fn 'string (constantly "") (^ format nil "~a~&~a" _a _b)
+              (until-if (^ string= "." (if (string= "\\q" _)
+                                           (return-from query-message nil)
+                                           _))
+                        (scan-stream *terminal-io* #'read-line))))
 
 (macrolet ((m ()
              (let ((sec (collect-first (scan-file "~/.twitter-oauth.lisp"))))
@@ -51,7 +48,7 @@
       "http://api.twitter.com/1/statuses/update.json"
       *access-token*
       :request-method :post
-      :user-parameters `(("status" . ,#"""#,message #'求職中""")
+      :user-parameters `(("status" . ,#"""#,message `',求職中""")
                          ,@(when reply-to `(("in_reply_to_status_id" . ,(princ-to-string reply-to)))))))))
 
 (defun tweet ()
@@ -80,16 +77,17 @@
                  *query-io*
                   #"""~&#,path #,screen--name (#,name,) #,(created-at-time created--at) #,id,~&#,text,~%""")))))))))
 
+(defvar *timeline-process* nil)
+
 (defun timeline ()
-  (bordeaux-threads:make-thread
-   (^ with-open-stream (in (oauth:access-protected-resource
-                            "https://userstream.twitter.com/2/user.json"
-                            *access-token*
-                            :drakma-args '(:want-stream t)))
-      (loop for line = (read-line in nil)
-            while line
-            do (print-tweet line)))
-   :name "https://userstream.twitter.com/2/user.json"))
+  (setf *timeline-process*
+        (bordeaux-threads:make-thread
+         (^ with-open-stream (in (oauth:access-protected-resource
+                                  "https://userstream.twitter.com/2/user.json"
+                                  *access-token*
+                                  :drakma-args '(:want-stream t)))
+            (collect-ignore (print-tweet (scan-stream in #'read-line))))
+         :name "https://userstream.twitter.com/2/user.json")))
 
 
 (defun local-profile-image-path (user-id profile-image-url)
@@ -100,10 +98,10 @@
   (unless (probe-file local-path)
     (ensure-directories-exist local-path)
     (with-open-file (out local-path :direction :output :element-type '(unsigned-byte 8))
-      (loop for i across (drakma:http-request image-url
-                                :external-format-out :utf-8
-                                :external-format-in :utf-8)
-            do (write-byte i out)))))
+      (write-sequence (drakma:http-request image-url
+                                           :external-format-out :utf-8
+                                           :external-format-in :utf-8)
+                      out))))
 
 (defun refresh-repl ()
   (sleep 0.1)
@@ -113,14 +111,30 @@
                                   (save-excursion
                                     (iimage-mode 1))))))
 
-(defvar *profile-image-process*
-  (spawn (loop
-           (receive ()
-             ((profile-image-url local-path)
-              (%get-profile-image profile-image-url local-path)
-              (refresh-repl))))))
+(defvar *profile-image-process* nil)
+
+(defun start-profile-image-process ()
+  (setf *profile-image-process*
+        (spawn (loop
+                 (receive ()
+                   ((profile-image-url local-path)
+                    (%get-profile-image profile-image-url local-path)
+                    (refresh-repl)))))))
 
 (defun get-profile-image (user-id profile-image-url)
   (let ((local-path (local-profile-image-path user-id profile-image-url)))
     (send *profile-image-process* (list profile-image-url local-path))
     local-path))
+
+(defun start ()
+  (when *timeline-process*
+    (sb-thread:destroy-thread *timeline-process*))
+  (when *profile-image-process*
+    (sb-thread:destroy-thread *profile-image-process*))
+  (timeline)
+  (start-profile-image-process))
+
+
+#|
+(drakma:http-request "http://a2.twimg.com/profile_images/119862218/スナップショット_2009-04-03_20-15-55_normal.png")
+|#
