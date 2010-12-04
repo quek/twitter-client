@@ -13,9 +13,9 @@
 (defpackage :repl-twitter-client
   (:use :cl :series :quek)
   (:shadowing-import-from :series let let* multiple-value-bind funcall defun)
-  (:export #:tweet
-           #:reply
-           #:timeline))
+  (:export #:start
+           #:tweet
+           #:reply))
 
 (in-package :repl-twitter-client)
 
