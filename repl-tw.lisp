@@ -51,7 +51,7 @@
 (defun print-tweet (json-string)
   (ignore-errors
     (json:with-decoder-simple-clos-semantics
-      (let ((json:*json-symbols-package* :repl-twitter-client))
+      (let ((json:*json-symbols-package* :info.read-eval-print.repl-tw))
         (let ((x (json:decode-json-from-string json-string)))
           (with-slots (text user id created--at) x
             (with-slots (name screen--name profile--image--url (user-id id)) user
