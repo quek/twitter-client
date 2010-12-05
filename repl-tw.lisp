@@ -1,26 +1,9 @@
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (require :series)
-  (require :cl-oauth)
-  (require :drakma)
-  (require :cl-json)
-  (require :quek)
-  (require :net-telent-date))
+(in-package :info.read-eval-print.repl-tw)
 
 ;; 対 drakma 用おまじない
 (setf drakma:*drakma-default-external-format* :utf-8)
 (pushnew '("application" . "json") drakma:*text-content-types* :test #'equal)
 
-(defpackage :repl-twitter-client
-  (:use :cl :series :quek)
-  (:shadowing-import-from :series let let* multiple-value-bind funcall defun)
-  (:export #:start
-           #:tweet
-           #:reply))
-
-(in-package :repl-twitter-client)
-
-(eval-when (:compile-toplevel :load-toplevel :execute)
-  (series::install :pkg :repl-twitter-client :implicit-map t))
 
 (defparameter *profile-image-directory* (ensure-directories-exist "/tmp/repl-twitter-client-images/"))
 
@@ -80,14 +63,13 @@
 (defvar *timeline-process* nil)
 
 (defun timeline ()
-  (setf *timeline-process*
-        (bordeaux-threads:make-thread
-         (^ with-open-stream (in (oauth:access-protected-resource
-                                  "https://userstream.twitter.com/2/user.json"
-                                  *access-token*
-                                  :drakma-args '(:want-stream t)))
-            (collect-ignore (print-tweet (scan-stream in #'read-line))))
-         :name "https://userstream.twitter.com/2/user.json")))
+  (bordeaux-threads:make-thread
+   (^ with-open-stream (in (oauth:access-protected-resource
+                            "https://userstream.twitter.com/2/user.json"
+                            *access-token*
+                            :drakma-args '(:want-stream t)))
+      (collect-ignore (print-tweet (scan-stream in #'read-line))))
+   :name "https://userstream.twitter.com/2/user.json"))
 
 
 (defun local-profile-image-path (user-id profile-image-url)
@@ -113,13 +95,15 @@
 
 (defvar *profile-image-process* nil)
 
+(defun receive-process ()
+  (ignore-errors
+    (receive ()
+      ((profile-image-url local-path)
+       (%get-profile-image profile-image-url local-path)
+       (refresh-repl)))))
+
 (defun start-profile-image-process ()
-  (setf *profile-image-process*
-        (spawn (loop
-                 (receive ()
-                   ((profile-image-url local-path)
-                    (%get-profile-image profile-image-url local-path)
-                    (refresh-repl)))))))
+  (spawn (loop (ignore-errors (receive-process)))))
 
 (defun get-profile-image (user-id profile-image-url)
   (let ((local-path (local-profile-image-path user-id profile-image-url)))
@@ -128,11 +112,13 @@
 
 (defun start ()
   (when *timeline-process*
-    (sb-thread:destroy-thread *timeline-process*))
+    (send *timeline-process* +exit+)
+    (setf *timeline-process* nil))
   (when *profile-image-process*
-    (sb-thread:destroy-thread *profile-image-process*))
-  (timeline)
-  (start-profile-image-process))
+    (send *profile-image-process* +exit+)
+    (setf *profile-image-process* nil))
+  (setf *timeline-process* (timeline))
+  (setf *profile-image-process* (start-profile-image-process)))
 
 
 #|
