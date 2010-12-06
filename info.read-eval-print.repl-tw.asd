@@ -8,4 +8,5 @@
                :series
                :cl-oauth
                :cl-json
-               :net-telent-date))
+               :net-telent-date
+               :trivial-shell))

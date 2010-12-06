@@ -5,7 +5,7 @@
 (pushnew '("application" . "json") drakma:*text-content-types* :test #'equal)
 
 
-(defparameter *profile-image-directory* (ensure-directories-exist "/tmp/repl-twitter-client-images/"))
+(defparameter *profile-image-directory* (ensure-directories-exist "/tmp/info.read-eval-print.repl-tw/"))
 
 (defun query-message ()
   (collect-fn 'string (constantly "") (^ format nil "~a~&~a" _a _b)
@@ -100,6 +100,7 @@
     (receive ()
       ((profile-image-url local-path)
        (%get-profile-image profile-image-url local-path)
+       (trivial-shell:shell-command #"""mogrify -resize 48x48 #,local-path""")
        (refresh-repl)))))
 
 (defun start-profile-image-process ()
