@@ -80,10 +80,9 @@
   (unless (probe-file local-path)
     (ensure-directories-exist local-path)
     (with-open-file (out local-path :direction :output :element-type '(unsigned-byte 8))
-      (write-sequence (drakma:http-request image-url
-                                           :external-format-out :utf-8
-                                           :external-format-in :utf-8)
-                      out))))
+      (write-sequence (drakma:http-request image-url) out))
+    ;; ImageMagic に頼る。
+    (trivial-shell:shell-command #"""mogrify -resize 32x32 #,local-path""")))
 
 (defun refresh-repl ()
   (sleep 0.1)
@@ -100,7 +99,6 @@
     (receive ()
       ((profile-image-url local-path)
        (%get-profile-image profile-image-url local-path)
-       (trivial-shell:shell-command #"""mogrify -resize 48x48 #,local-path""")
        (refresh-repl)))))
 
 (defun start-profile-image-process ()
@@ -120,8 +118,3 @@
     (setf *profile-image-process* nil))
   (setf *timeline-process* (timeline))
   (setf *profile-image-process* (start-profile-image-process)))
-
-
-#|
-(drakma:http-request "http://a2.twimg.com/profile_images/119862218/スナップショット_2009-04-03_20-15-55_normal.png")
-|#
