@@ -1,10 +1,5 @@
 (in-package :info.read-eval-print.repl-tw)
 
-;; 対 drakma 用おまじない
-(setf drakma:*drakma-default-external-format* :utf-8)
-(pushnew '("application" . "json") drakma:*text-content-types* :test #'equal)
-
-
 (defparameter *profile-image-directory* (ensure-directories-exist "/tmp/info.read-eval-print.repl-tw/"))
 
 (defun query-message ()
@@ -13,26 +8,6 @@
                                            (return-from query-message nil)
                                            _))
                         (scan-stream *terminal-io* #'read-line))))
-
-(macrolet ((m ()
-             (let ((sec (collect-first (scan-file "~/.twitter-oauth.lisp"))))
-               `(defparameter *access-token*
-                  (oauth:make-access-token :consumer (oauth:make-consumer-token
-                                                      :key ,(getf sec :consumer-key)
-                                                      :secret ,(getf sec :consumer-secret))
-                                           :key ,(getf sec :access-key)
-                                           :secret ,(getf sec :access-secret))))))
-  (m))
-
-(defun update (message &key reply-to)
-  (when message
-    (json:decode-json-from-string
-     (oauth:access-protected-resource
-      "http://api.twitter.com/1/statuses/update.json"
-      *access-token*
-      :request-method :post
-      :user-parameters `(("status" . ,#"""#,message `',求職中""")
-                         ,@(when reply-to `(("in_reply_to_status_id" . ,(princ-to-string reply-to)))))))))
 
 (defun tweet ()
   (let ((message (query-message)))
@@ -43,22 +18,6 @@
   (let ((message (query-message)))
     (update message :reply-to in-reply-to-status-id)
     message))
-
-(defun created-at-time (x)
-  (multiple-value-bind (s m h) (decode-universal-time  (net.telent.date:parse-time x))
-    (format nil "~2,'0d:~2,'0d:~2,'0d" h m s)))
-
-(defun print-tweet (json-string)
-  (ignore-errors
-    (json:with-decoder-simple-clos-semantics
-      (let ((json:*json-symbols-package* :info.read-eval-print.repl-tw))
-        (let ((x (json:decode-json-from-string json-string)))
-          (with-slots (text user id created--at) x
-            (with-slots (name screen--name profile--image--url (user-id id)) user
-              (let ((path (get-profile-image id profile--image--url)))
-                (format
-                 *query-io*
-                  #"""~&#,path #,screen--name (#,name,) #,(created-at-time created--at) #,id,~&#,text,~%""")))))))))
 
 (defvar *timeline-process* nil)
 
@@ -108,6 +67,18 @@
   (let ((local-path (local-profile-image-path user-id profile-image-url)))
     (send *profile-image-process* (list profile-image-url local-path))
     local-path))
+
+(defun print-tweet (json-string)
+  (ignore-errors
+    (json:with-decoder-simple-clos-semantics
+      (let ((json:*json-symbols-package* :info.read-eval-print.repl-tw))
+        (let ((x (json:decode-json-from-string json-string)))
+          (with-slots (text user id created--at) x
+            (with-slots (name screen--name profile--image--url (user-id id)) user
+              (let ((path (get-profile-image id profile--image--url)))
+                (format
+                 *query-io*
+                  #"""~&#,path #,screen--name (#,name,) #,(created-at-time created--at) #,id,~&#,text,~%""")))))))))
 
 (defun start ()
   (when *timeline-process*

@@ -24,16 +24,16 @@
 
 (defun get-user-profile-image-pixbuf (tweet)
   (let* ((url (twitter:twitter-user-profile-image-url
-            (twitter:tweet-user tweet)))
+               (twitter:tweet-user tweet)))
          (pixbuf (gethash url *user-profile-images*)))
     (if pixbuf
         pixbuf
         (setf (gethash url *user-profile-images*)
-              (or (ignore-errors
-                    (with-open-stream (var (drakma:http-request url
-                                                                :want-stream t))
-                      (make-instance 'gdk:pixbuf :source var)))
-                  (make-instance 'gdk:pixbuf :width 10 :height 10))))))
+
+              (with-open-stream (var (drakma:http-request url
+                                                          :want-stream t))
+                (make-instance 'gdk:pixbuf :source var)))
+        (make-instance 'gdk:pixbuf :width 10 :height 10))))
 
 (defun update-timeline (last-id store)
   (let ((new-timeline (twitter:friends-timeline :since-id last-id)))
