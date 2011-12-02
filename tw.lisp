@@ -1,5 +1,7 @@
 (in-package :info.read-eval-print.tw)
 
+(named-readtables:in-readtable quek:|#"|)
+
 ;; 対 drakma 用おまじない
 (setf drakma:*drakma-default-external-format* :utf-8)
 (pushnew '("application" . "json") drakma:*text-content-types* :test #'equal)
@@ -23,7 +25,7 @@
       "http://api.twitter.com/1/statuses/update.json"
       *access-token*
       :request-method :post
-      :user-parameters `(("status" . ,#"""#,message (funcall #'求職)""")
+      :user-parameters `(("status" . ,#"""#,message""")
                          ,@(when reply-to `(("in_reply_to_status_id" . ,(princ-to-string reply-to)))))))))
 
 (defun retweet (id)
@@ -36,3 +38,11 @@
 (defun created-at-time (x)
   (multiple-value-bind (s m h) (decode-universal-time  (net.telent.date:parse-time x))
     (format nil "~2,'0d:~2,'0d:~2,'0d" h m s)))
+
+
+(defmacro with-user-stream ((stream-var) &body body)
+  `(with-open-stream (,stream-var (oauth:access-protected-resource
+                                   "https://userstream.twitter.com/2/user.json"
+                                   *access-token*
+                                   :drakma-args '(:want-stream t)))
+     ,@body))

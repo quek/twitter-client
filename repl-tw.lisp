@@ -1,5 +1,7 @@
 (in-package :info.read-eval-print.repl-tw)
 
+(named-readtables:in-readtable quek:|#"|)
+
 (defparameter *profile-image-directory* (ensure-directories-exist "/tmp/info.read-eval-print.repl-tw/"))
 
 (defun query-message ()
@@ -23,11 +25,8 @@
 
 (defun timeline ()
   (bordeaux-threads:make-thread
-   (^ with-open-stream (in (oauth:access-protected-resource
-                            "https://userstream.twitter.com/2/user.json"
-                            *access-token*
-                            :drakma-args '(:want-stream t)))
-      (collect-ignore (print-tweet (scan-stream in #'read-line))))
+   (^ (with-user-stream (in)
+        (collect-ignore (print-tweet (print (scan-stream in #'read-line))))))
    :name "https://userstream.twitter.com/2/user.json"))
 
 
@@ -68,6 +67,7 @@
     (send *profile-image-process* (list profile-image-url local-path))
     local-path))
 
+;; TODO 画像表示の改善 http://d.hatena.ne.jp/cranebird/20110430/1304122311
 (defun print-tweet (json-string)
   (ignore-errors
     (json:with-decoder-simple-clos-semantics

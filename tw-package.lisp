@@ -1,7 +1,7 @@
 (defpackage :info.read-eval-print.tw
-  (:use :quek)
+  (:use :cl :quek)
   (:nicknames :tw)
   (:export #:update
            #:retweet
            #:created-at-time
-           #:*access-token*))
+           #:with-user-stream))
