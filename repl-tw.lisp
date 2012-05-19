@@ -26,7 +26,7 @@
 (defun timeline ()
   (bordeaux-threads:make-thread
    (^ (with-user-stream (in)
-        (collect-ignore (print-tweet (print (scan-stream in #'read-line))))))
+        (collect-ignore (print-tweet (scan-stream in #'read-line)))))
    :name "https://userstream.twitter.com/2/user.json"))
 
 
